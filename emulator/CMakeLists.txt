@@ -7,7 +7,16 @@ endif()
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native")
 find_package(OpenMP)
 find_package(pybind11 CONFIG REQUIRED)
-pybind11_add_module(_emu src/bindings.cpp src/solver.cpp)
+pybind11_add_module(_emu
+  src/bindings.cpp
+  src/solver.cpp
+  src/boundary.cpp
+  src/advection.cpp
+  src/diffusion.cpp
+  src/reaction.cpp
+  src/ignition.cpp
+  src/diagnostics.cpp
+)
 if(OpenMP_CXX_FOUND)
   target_link_libraries(_emu PRIVATE OpenMP::OpenMP_CXX)
 endif()
