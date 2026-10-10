@@ -1,0 +1,40 @@
+fuel:
+  type: CH4
+  mdot_mg_s: 2.0
+  YF_inj: 1.0
+  Tb: 400.0
+
+ambient:
+  XO2: 0.16
+  p_atm: 1.0
+  T_inf: 300.0
+
+geometry:
+  Rb: 0.00635
+  Rout: 0.19
+  n: 150
+  stretch: 1.0
+
+transport:
+  lam_ref: 0.07
+  lam_exponent: 0.7
+  cp: 1167.0
+  Le_fuel: 1.0
+  Le_o2: 1.1
+  Le_product: 1.2
+
+radiation:
+  enabled: true
+  mult: 1.0
+  a_p_ref: 0.6
+
+ignite:
+  T: 1600.0
+  t: 0.05
+  kernel_Rb_multiples: 2.0
+
+numerics:
+  cfl: 0.4
+  fo: 0.4
+  t_end: 0.4
+  reaction_iterations: 12

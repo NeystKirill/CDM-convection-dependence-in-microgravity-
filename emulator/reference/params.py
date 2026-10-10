@@ -1,74 +1,102 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import yaml
 
-from formulas import thermal_diffusivity, mass_diffusivity
+from .fuel import FUELS, M_O2, M_N2, M_PRODUCT, LE_FUEL, LE_O2, LE_PRODUCT, RB_SFLAME
+from .gas import mole_to_mass_fraction
 
 
 @dataclass
 class Params:
-    nx: int
-    ny: int
-    Lx: float
-    Ly: float
-    rho: float
-    cp: float
-    lam: float
-    U: float
+    fuel: str
+    Rb: float
+    Rout: float
+    n: int
+    stretch: float
+    p: float
+    mdot: float
+    YF_inj: float
+    XO2_inf: float
     T_inf: float
-    Yo_inf: float
-    fuel_x0: float
-    fuel_x1: float
-    Ts: float
-    Yf_s: float
+    Tb: float
+    Tign: float
+    tign: float
+    ignition_kernel_Rb: float
+    rad_enabled: bool
+    rad_mult: float
+    a_p_ref: float
+    lam_ref: float
+    lam_exponent: float
+    cp: float
+    Le_fuel: float
+    Le_o2: float
+    Le_product: float
+    Mo: float
+    Mn2: float
+    Mp: float
     B: float
     Ta: float
     Qcp: float
     s: float
-    a_p: float
-    ign_T: float
-    ign_t: float
-    ign_x0: float
-    ign_x1: float
-    ign_y1: float
-    t_end: float
+    Mf: float
     cfl: float
     fo: float
-
-    dx: float = field(init=False)
-    dy: float = field(init=False)
-    alpha: float = field(init=False)
-    D: float = field(init=False)
-    dt: float = field(init=False)
+    t_end: float
+    n_iter: int
 
     def __post_init__(self):
-        self.dx = self.Lx / self.nx
-        self.dy = self.Ly / self.ny
-        self.alpha = thermal_diffusivity(self.lam, self.rho, self.cp)
-        self.D = mass_diffusivity(self.alpha, Le=1.0)
-
-        dt_diff = self.fo * 0.5 / (self.alpha * (1.0 / self.dx**2 + 1.0 / self.dy**2))
-        if self.U > 0:
-            dt_adv = self.cfl * self.dx / self.U
-            self.dt = min(dt_adv, dt_diff)
-        else:
-            self.dt = dt_diff
+        self.Yo_inf = mole_to_mass_fraction(self.XO2_inf, self.Mo, self.Mn2)
 
     @classmethod
     def from_yaml(cls, path):
         with open(path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
+
+        fuel_type = cfg["fuel"]["type"]
+        fuel_defaults = FUELS[fuel_type]
+        kin = cfg["fuel"].get("kinetics", {})
+
+        geom = cfg["geometry"]
+        amb = cfg["ambient"]
+        tr = cfg.get("transport", {})
+        rad = cfg.get("radiation", {})
+        ign = cfg["ignite"]
+        num = cfg.get("numerics", cfg.get("time", {}))
+
         return cls(
-            nx=int(cfg["grid"]["nx"]), ny=int(cfg["grid"]["ny"]),
-            Lx=float(cfg["grid"]["Lx"]), Ly=float(cfg["grid"]["Ly"]),
-            rho=float(cfg["gas"]["rho"]), cp=float(cfg["gas"]["cp"]), lam=float(cfg["gas"]["lam"]),
-            U=float(cfg["flow"]["U"]), T_inf=float(cfg["flow"]["T_inf"]), Yo_inf=float(cfg["flow"]["Yo_inf"]),
-            fuel_x0=float(cfg["fuel"]["x0"]), fuel_x1=float(cfg["fuel"]["x1"]),
-            Ts=float(cfg["fuel"]["Ts"]), Yf_s=float(cfg["fuel"]["Yf_s"]),
-            B=float(cfg["react"]["B"]), Ta=float(cfg["react"]["Ta"]),
-            Qcp=float(cfg["react"]["Qcp"]), s=float(cfg["react"]["s"]),
-            a_p=float(cfg["rad"]["a_p"]),
-            ign_T=float(cfg["ignite"]["T"]), ign_t=float(cfg["ignite"]["t"]),
-            ign_x0=float(cfg["ignite"]["x0"]), ign_x1=float(cfg["ignite"]["x1"]), ign_y1=float(cfg["ignite"]["y1"]),
-            t_end=float(cfg["time"]["t_end"]), cfl=float(cfg["time"]["cfl"]), fo=float(cfg["time"]["fo"]),
+            fuel=fuel_type,
+            Rb=float(geom.get("Rb", RB_SFLAME)),
+            Rout=float(geom.get("Rout", 30.0 * geom.get("Rb", RB_SFLAME))),
+            n=int(geom.get("n", 150)),
+            stretch=float(geom.get("stretch", 1.0)),
+            p=float(amb["p_atm"]) * 101325.0,
+            mdot=float(cfg["fuel"]["mdot_mg_s"]) * 1.0e-6,
+            YF_inj=float(cfg["fuel"].get("YF_inj", 1.0)),
+            XO2_inf=float(amb["XO2"]),
+            T_inf=float(amb.get("T_inf", 300.0)),
+            Tb=float(cfg["fuel"].get("Tb", 400.0)),
+            Tign=float(ign["T"]),
+            tign=float(ign["t"]),
+            ignition_kernel_Rb=float(ign.get("kernel_Rb_multiples", 2.0)),
+            rad_enabled=bool(rad.get("enabled", True)),
+            rad_mult=float(rad.get("mult", 1.0)),
+            a_p_ref=float(rad.get("a_p_ref", 0.6)),
+            lam_ref=float(tr.get("lam_ref", 0.07)),
+            lam_exponent=float(tr.get("lam_exponent", 0.7)),
+            cp=float(tr.get("cp", 1167.0)),
+            Le_fuel=float(tr.get("Le_fuel", LE_FUEL)),
+            Le_o2=float(tr.get("Le_o2", LE_O2)),
+            Le_product=float(tr.get("Le_product", LE_PRODUCT)),
+            Mo=float(tr.get("M_o2", M_O2)),
+            Mn2=float(tr.get("M_n2", M_N2)),
+            Mp=float(tr.get("M_product", M_PRODUCT)),
+            B=float(kin.get("B", fuel_defaults["B"])),
+            Ta=float(kin.get("Ta", fuel_defaults["Ta"])),
+            Qcp=float(kin.get("Qcp", fuel_defaults["Qcp"])),
+            s=float(kin.get("s", fuel_defaults["s"])),
+            Mf=float(kin.get("Mf", fuel_defaults["M"])),
+            cfl=float(num.get("cfl", 0.4)),
+            fo=float(num.get("fo", 0.4)),
+            t_end=float(num["t_end"]),
+            n_iter=int(num.get("reaction_iterations", 12)),
         )

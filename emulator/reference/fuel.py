@@ -1,0 +1,14 @@
+FUELS = {
+    "CH4": dict(M=0.01604, s=4.00, Qcp=8600.0, B=5.0e7, Ta=15000.0),
+    "C2H4": dict(M=0.02805, s=3.42, Qcp=9800.0, B=8.0e7, Ta=14000.0),
+}
+
+M_O2 = 0.032
+M_N2 = 0.028
+M_PRODUCT = 0.029
+
+LE_FUEL = 1.0
+LE_O2 = 1.1
+LE_PRODUCT = 1.2
+
+RB_SFLAME = 0.00635

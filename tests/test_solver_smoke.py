@@ -1,4 +1,4 @@
-from emulator.reference import Params, Solver
+from level0_2d.reference import Params, Solver
 
 
 def _small_params():

@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-emu = pytest.importorskip("emulator._emu")
+emu = pytest.importorskip("level0_2d._emu")
 
-from emulator.reference import Params as PyParams, Solver as PySolver
+from level0_2d.reference import Params as PyParams, Solver as PySolver
 
 KWARGS = dict(
     nx=40, ny=20, Lx=0.10, Ly=0.04,

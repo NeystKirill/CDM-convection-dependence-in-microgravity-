@@ -1,38 +1,52 @@
 import numpy as np
-
-from .grid import T as IDX_T, F as IDX_F, O as IDX_O
-
-N_ITER = 30
+from numba import njit
 
 
-def react_step(grid, params, dt_half):
-    j, i = grid.interior
-    q = grid.q
+@njit(cache=True)
+def _react_core(T, Yf, Yo, B, Ta, Qcp, s, dt_half, n_iter):
+    n = T.shape[0]
+    T_out = np.empty(n)
+    Yf_out = np.empty(n)
+    Yo_out = np.empty(n)
 
-    T0 = q[IDX_T, j, i]
-    Yf0 = q[IDX_F, j, i]
-    Yo0 = q[IDX_O, j, i]
-    B, Ta, Qcp, s = params.B, params.Ta, params.Qcp, params.s
+    for i in range(n):
+        T0, Yf0, Yo0 = T[i], Yf[i], Yo[i]
+        xi_max = Yo0 / s
+        if Yf0 < xi_max:
+            xi_max = Yf0
+        if xi_max < 0.0:
+            xi_max = 0.0
+        xi = 0.0
 
-    xi_max = np.maximum(np.minimum(Yf0, Yo0 / s), 0.0)
-    xi = np.zeros_like(T0)
+        for _ in range(n_iter):
+            Tc = T0 + Qcp * xi
+            Yfc = Yf0 - xi
+            Yoc = Yo0 - s * xi
+            expo = np.exp(-Ta / Tc)
+            omega = B * Yfc * Yoc * expo
 
-    for _ in range(N_ITER):
-        Tc = T0 + Qcp * xi
-        Yfc = Yf0 - xi
-        Yoc = Yo0 - s * xi
-        expo = np.exp(-Ta / Tc)
-        omega = B * Yfc * Yoc * expo
+            residual = xi - dt_half * omega
+            domega_dxi = B * expo * (-Yoc - s * Yfc + Yfc * Yoc * Qcp * Ta / Tc**2)
+            jac = 1.0 - dt_half * domega_dxi
+            if abs(jac) < 1e-30:
+                jac = 1e-30
 
-        residual = xi - dt_half * omega
-        domega_dxi = B * expo * (
-            -Yoc - s * Yfc + Yfc * Yoc * Qcp * Ta / Tc**2
-        )
-        jac = 1.0 - dt_half * domega_dxi
-        jac = np.where(np.abs(jac) < 1e-30, 1e-30, jac)
+            xi = xi - residual / jac
+            if xi < 0.0:
+                xi = 0.0
+            elif xi > xi_max:
+                xi = xi_max
 
-        xi = np.clip(xi - residual / jac, 0.0, xi_max)
+        T_out[i] = T0 + Qcp * xi
+        Yf_out[i] = Yf0 - xi
+        Yo_out[i] = Yo0 - s * xi
 
-    q[IDX_T, j, i] = T0 + Qcp * xi
-    q[IDX_F, j, i] = Yf0 - xi
-    q[IDX_O, j, i] = Yo0 - s * xi
+    return T_out, Yf_out, Yo_out
+
+
+def react_step(T, Yf, Yo, params, dt_half):
+    return _react_core(T, Yf, Yo, params.B, params.Ta, params.Qcp, params.s, dt_half, params.n_iter)
+
+
+def reaction_rate(T, Yf, Yo, params):
+    return params.B * Yf * Yo * np.exp(-params.Ta / T)

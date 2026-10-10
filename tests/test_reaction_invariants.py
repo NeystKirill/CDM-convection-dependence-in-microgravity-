@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from emulator.reference.grid import Grid, T as IDX_T, F as IDX_F, O as IDX_O
-from emulator.reference.reaction import react_step
+from level0_2d.reference.grid import Grid, T as IDX_T, F as IDX_F, O as IDX_O
+from level0_2d.reference.reaction import react_step
 
 
 def _make_state(n, seed):

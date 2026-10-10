@@ -8,3 +8,5 @@ scikit-learn
 numba
 pybind11
 pytest
+h5py
+streamlit

@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from emulator.reference.grid import Grid, T as IDX_T
-from emulator.reference.diffusion import diffusion_rhs
+from level0_2d.reference.grid import Grid, T as IDX_T
+from level0_2d.reference.diffusion import diffusion_rhs
 
 ALPHA = 1.0
 A = 1.0

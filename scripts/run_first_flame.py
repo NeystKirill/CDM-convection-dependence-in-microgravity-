@@ -9,7 +9,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from emulator.reference import Params, Solver
+from level0_2d.reference import Params, Solver
 
 
 def main():

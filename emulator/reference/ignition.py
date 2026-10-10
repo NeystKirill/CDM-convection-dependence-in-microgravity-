@@ -1,17 +1,8 @@
 import numpy as np
 
-from .grid import T as IDX_T
 
-
-def apply_ignition(grid, params, t):
-    if t >= params.ign_t:
-        return
-    j, i = grid.interior
-    x = grid.x[i]
-    y = grid.y[j]
-    in_x = (x >= params.ign_x0) & (x <= params.ign_x1)
-    in_y = y <= params.ign_y1
-    mask = in_y[:, None] & in_x[None, :]
-
-    Tfield = grid.q[IDX_T, j, i]
-    grid.q[IDX_T, j, i] = np.where(mask, np.maximum(Tfield, params.ign_T), Tfield)
+def apply_ignition(T, grid, params, t):
+    if t >= params.tign:
+        return T
+    kernel = grid.r_c <= grid.r_face[0] + params.ignition_kernel_Rb * params.Rb
+    return np.where(kernel, np.maximum(T, params.Tign), T)
