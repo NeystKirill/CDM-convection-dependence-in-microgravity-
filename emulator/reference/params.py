@@ -40,7 +40,6 @@ class Params:
     s: float
     Mf: float
     cfl: float
-    fo: float
     t_end: float
     n_iter: int
 
@@ -96,7 +95,6 @@ class Params:
             s=float(kin.get("s", fuel_defaults["s"])),
             Mf=float(kin.get("Mf", fuel_defaults["M"])),
             cfl=float(num.get("cfl", 0.4)),
-            fo=float(num.get("fo", 0.4)),
             t_end=float(num["t_end"]),
             n_iter=int(num.get("reaction_iterations", 12)),
         )

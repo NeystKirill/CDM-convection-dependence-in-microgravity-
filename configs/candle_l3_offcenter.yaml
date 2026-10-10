@@ -1,0 +1,47 @@
+fuel:
+  type: CH4
+  Ts: 600.0
+  Yf_s: 1.0
+
+ambient:
+  XO2: 0.21
+  p_atm: 1.0
+  T_inf: 300.0
+
+geometry:
+  Lx: 0.03
+  Ly: 0.03
+  Lz: 0.06
+  nx: 16
+  ny: 16
+  nz: 30
+  wick_r: 0.003
+  wick_x0: 0.009
+  wick_y0: 0.015
+
+flow:
+  g_frac: 1.0
+  U_ext: 0.0
+
+transport:
+  lam_ref: 0.07
+  lam_exponent: 0.7
+  cp: 1167.0
+  Pr: 0.7
+  Le_fuel: 1.0
+  Le_o2: 1.1
+  Le_product: 1.2
+
+radiation:
+  enabled: true
+  mult: 1.0
+  a_p_ref: 0.6
+
+ignite:
+  T: 1600.0
+  t: 1.0
+
+numerics:
+  cfl: 0.4
+  t_end: 1.0
+  reaction_iterations: 12

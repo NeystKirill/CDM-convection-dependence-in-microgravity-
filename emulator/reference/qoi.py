@@ -1,6 +1,6 @@
 import numpy as np
 
-from formulas import radiative_loss
+from formulas import radiative_loss, SIGMA_SB
 from .reaction import reaction_rate
 
 IGNITED_T = 1000.0
@@ -12,13 +12,27 @@ def heat_release(T, Yf, Yo, rho, params):
     return rho * params.cp * params.Qcp * omega
 
 
+def absorption_coeff(Yf, Yo, params):
+    Yp = 1.0 - Yf - Yo
+    p_atm = params.p / 101325.0
+    return params.rad_mult * params.a_p_ref * p_atm * np.clip(Yp, 0.0, 1.0)
+
+
 def radiative_loss_field(T, Yf, Yo, params):
     if not params.rad_enabled:
         return np.zeros_like(T)
-    Yp = 1.0 - Yf - Yo
-    p_atm = params.p / 101325.0
-    a_p = params.rad_mult * params.a_p_ref * p_atm * np.clip(Yp, 0.0, 1.0)
+    a_p = absorption_coeff(Yf, Yo, params)
     return radiative_loss(T, params.T_inf, a_p)
+
+
+def radiative_loss_linearized(T, Yf, Yo, params):
+    if not params.rad_enabled:
+        zeros = np.zeros_like(T)
+        return zeros, zeros
+    a_p = absorption_coeff(Yf, Yo, params)
+    q_rad = radiative_loss(T, params.T_inf, a_p)
+    slope = 16.0 * SIGMA_SB * a_p * T**3
+    return q_rad, slope
 
 
 def flame_radius(T, Yf, Yo, rho, grid, params):

@@ -3,11 +3,11 @@ import numpy as np
 from .grid import Grid
 from .gas import mean_molar_mass, density, conductivity, species_diffusivity
 from .velocity import face_mass_flow, cell_velocity
-from .diffusion import flux_divergence
+from .diffusion import implicit_diffuse
 from .advection import upwind_term
 from .reaction import react_step
 from .ignition import apply_ignition
-from .qoi import QoiTracker, heat_release, radiative_loss_field, flame_radius, radiative_fraction
+from .qoi import QoiTracker, radiative_loss_linearized, flame_radius, radiative_fraction
 
 
 class Solver:
@@ -42,44 +42,40 @@ class Solver:
         mdot_face = face_mass_flow(self.grid, p.mdot, drho_dt)
         return cell_velocity(self.grid, mdot_face, rho)
 
-    def _adaptive_dt(self, rho, lam, Df, Do, u):
+    def _adaptive_dt(self, u):
         p = self.params
         dr = np.diff(self.grid.r_face)
-        alpha = lam / (rho * p.cp)
-        diff_rate = np.maximum.reduce([alpha, Df, Do]) / dr**2
-        dt_diff = p.fo / np.max(diff_rate)
         u_pos = np.maximum(np.abs(u), 1e-12)
         dt_adv = p.cfl * np.min(dr / u_pos)
-        return min(dt_diff, dt_adv, p.t_end - self.t)
+        return min(dt_adv, p.t_end - self.t)
 
     def step(self):
         p, g = self.params, self.grid
 
+        if self.t >= p.t_end:
+            return 0.0
+
         rho = self._density()
         lam, Df, Do = self._transport_coeffs(rho)
         u = self._velocity(rho)
-        self.dt = self._adaptive_dt(rho, lam, Df, Do, u)
+        self.dt = self._adaptive_dt(u)
         dt = self.dt
 
         self.T, self.Yf, self.Yo = react_step(self.T, self.Yf, self.Yo, p, dt / 2)
 
         alpha = lam / (rho * p.cp)
-        dT = upwind_term(g, self.T, u, p.Tb) + flux_divergence(
-            g, self.T, alpha, p.Tb, alpha[0], p.T_inf, alpha[-1]
-        )
-        qrad = radiative_loss_field(self.T, self.Yf, self.Yo, p)
-        dT -= qrad / (rho * p.cp)
+        T_adv = self.T + dt * upwind_term(g, self.T, u, p.Tb)
+        Yf_adv = self.Yf + dt * upwind_term(g, self.Yf, u, p.YF_inj)
+        Yo_adv = self.Yo + dt * upwind_term(g, self.Yo, u, 0.0)
 
-        dYf = upwind_term(g, self.Yf, u, p.YF_inj) + flux_divergence(
-            g, self.Yf, Df, p.YF_inj, Df[0], 0.0, Df[-1]
-        )
-        dYo = upwind_term(g, self.Yo, u, 0.0) + flux_divergence(
-            g, self.Yo, Do, 0.0, Do[0], p.Yo_inf, Do[-1]
-        )
+        q_rad, rad_slope = radiative_loss_linearized(self.T, self.Yf, self.Yo, p)
+        rad_const = q_rad - rad_slope * self.T
+        diag_extra = dt * rad_slope / (rho * p.cp)
+        rhs_extra = -dt * rad_const / (rho * p.cp)
 
-        self.T = self.T + dt * dT
-        self.Yf = np.clip(self.Yf + dt * dYf, 0.0, 1.0)
-        self.Yo = np.clip(self.Yo + dt * dYo, 0.0, 1.0)
+        self.T = implicit_diffuse(g, T_adv, alpha, p.Tb, alpha[0], p.T_inf, alpha[-1], dt, diag_extra, rhs_extra)
+        self.Yf = np.clip(implicit_diffuse(g, Yf_adv, Df, p.YF_inj, Df[0], 0.0, Df[-1], dt), 0.0, 1.0)
+        self.Yo = np.clip(implicit_diffuse(g, Yo_adv, Do, 0.0, Do[0], p.Yo_inf, Do[-1], dt), 0.0, 1.0)
 
         self.T = apply_ignition(self.T, g, p, self.t)
 

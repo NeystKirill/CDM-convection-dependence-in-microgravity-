@@ -7,18 +7,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from emulator.reference import Params, Solver
-from emulator.reference.history import Recorder
+from emulator.common.history import Recorder
 
 st.set_page_config(page_title="Flame in Freefall", layout="wide")
-st.title("Flame in Freefall — эмулятор сферического пламени в микрогравитации")
+st.title("Flame in Freefall — эмулятор пламени в микрогравитации")
+
+LEVELS = {
+    "1D — сферическое пламя": {"glob": "sflame_*.yaml", "module": "emulator.reference"},
+    "2D — свеча в потоке (осесимм.)": {"glob": "candle_l2_*.yaml", "module": "level2"},
+    "3D — свеча в потоке": {"glob": "candle_l3_*.yaml", "module": "level3"},
+}
 
 config_dir = Path(__file__).resolve().parent.parent / "configs"
-config_files = sorted(config_dir.glob("sflame_*.yaml"))
-config_names = [f.name for f in config_files]
 
 with st.sidebar:
+    st.header("Уровень")
+    level_name = st.radio("Размерность модели", list(LEVELS.keys()))
+    level = LEVELS[level_name]
+
     st.header("Режим")
+    config_files = sorted(config_dir.glob(level["glob"]))
+    config_names = [f.name for f in config_files]
     selected = st.selectbox("Конфиг (configs/*.yaml)", config_names)
     run_button = st.button("Запустить")
     save_history = st.checkbox("Сохранить историю прогона", value=True)
@@ -27,26 +36,26 @@ with st.sidebar:
         "не в интерфейсе. Чтобы изменить режим — отредактируйте или добавьте файл в configs/."
     )
 
+module = __import__(level["module"], fromlist=["Params", "Solver"])
+Params, Solver = module.Params, module.Solver
+
 config_path = config_dir / selected
 params = Params.from_yaml(str(config_path))
 
 with st.expander("Параметры выбранного конфига", expanded=True):
     cols = st.columns(4)
     cols[0].write(f"**Топливо:** {params.fuel}")
-    cols[0].write(f"**ṁ:** {params.mdot*1e6:.2f} мг/с")
-    cols[0].write(f"**Y_F,inj:** {params.YF_inj:.2f}")
+    cols[0].write(f"**T_inf:** {params.T_inf:.0f} K")
     cols[1].write(f"**X_O2,∞:** {params.XO2_inf:.3f}")
     cols[1].write(f"**p:** {params.p/101325:.2f} атм")
-    cols[1].write(f"**T_inf / T_b:** {params.T_inf:.0f} / {params.Tb:.0f} K")
-    cols[2].write(f"**R_b / R_out:** {params.Rb*1000:.2f} / {params.Rout*1000:.1f} мм")
-    cols[2].write(f"**n ячеек:** {params.n}")
-    cols[2].write(f"**Излучение:** {'вкл' if params.rad_enabled else 'выкл'} × {params.rad_mult}")
-    cols[3].write(f"**B / Ta:** {params.B:.2e} / {params.Ta:.0f}")
-    cols[3].write(f"**Qcp / s:** {params.Qcp:.0f} / {params.s:.2f}")
+    cols[2].write(f"**B / Ta:** {params.B:.2e} / {params.Ta:.0f}")
+    cols[2].write(f"**Qcp / s:** {params.Qcp:.0f} / {params.s:.2f}")
     cols[3].write(f"**t_end:** {params.t_end:.2f} с")
+    if hasattr(params, "g_frac"):
+        cols[3].write(f"**g_frac / U_ext:** {params.g_frac:.2f} / {params.U_ext:.3f} м/с")
 
 
-def draw_frame(solver):
+def draw_level1(solver):
     state = solver.state()
     q = solver.qoi()
 
@@ -71,14 +80,50 @@ def draw_frame(solver):
     return fig, q
 
 
+def draw_level2(solver):
+    state = solver.state()
+    q = solver.qoi()
+
+    fig, ax = plt.subplots(figsize=(5, 8))
+    cs = ax.contourf(state["r"] * 1000.0, state["z"] * 1000.0, state["T"], levels=30, cmap="inferno")
+    fig.colorbar(cs, ax=ax, label="T, К")
+    ax.set_xlabel("r, мм")
+    ax.set_ylabel("z, мм")
+    ax.set_title(f"t = {solver.t:.3f} с, T_max = {q['T_max']:.0f} К, Da = {q['da']:.2f}")
+    fig.tight_layout()
+    return fig, q
+
+
+def draw_level3(solver):
+    state = solver.state()
+    q = solver.qoi()
+
+    j_mid = params.ny // 2
+    fig, ax = plt.subplots(figsize=(5, 8))
+    cs = ax.contourf(state["x"] * 1000.0, state["z"] * 1000.0, state["T"][:, j_mid, :], levels=30, cmap="inferno")
+    fig.colorbar(cs, ax=ax, label="T, К")
+    ax.set_xlabel("x, мм")
+    ax.set_ylabel("z, мм")
+    ax.set_title(f"t = {solver.t:.3f} с, срез y = {state['y'][j_mid]*1000:.1f} мм, T_max = {q['T_max']:.0f} К")
+    fig.tight_layout()
+    return fig, q
+
+
+DRAWERS = {
+    "1D — сферическое пламя": draw_level1,
+    "2D — свеча в потоке (осесимм.)": draw_level2,
+    "3D — свеча в потоке": draw_level3,
+}
+
 if run_button:
     solver = Solver(params)
     recorder = Recorder(solver)
+    draw_frame = DRAWERS[level_name]
 
     plot_slot = st.empty()
     metrics_slot = st.empty()
 
-    steps_per_frame = 40
+    steps_per_frame = 20
     while solver.t < params.t_end:
         for _ in range(steps_per_frame):
             if solver.t >= params.t_end:
@@ -93,10 +138,11 @@ if run_button:
 
         cols = metrics_slot.columns(5)
         cols[0].metric("T_max, К", f"{q['T_max']:.0f}")
-        cols[1].metric("r_f, мм", f"{q['r_f']*1000:.1f}")
-        cols[2].metric("χ_rad", f"{q['chi_rad']:.2f}")
-        cols[3].metric("η", f"{q['eta']:.2f}")
-        cols[4].metric("Режим", q["regime"])
+        cols[1].metric("χ_rad", f"{q['chi_rad']:.2f}")
+        cols[2].metric("η", f"{q['eta']:.2f}")
+        cols[3].metric("Режим", q["regime"])
+        if "da" in q:
+            cols[4].metric("Da", f"{q['da']:.2f}")
 
     st.success(f"Расчёт завершён: {solver.n_steps} шагов, t = {solver.t:.3f} с")
 
@@ -107,4 +153,4 @@ if run_button:
         recorder.to_hdf5(out_path)
         st.info(f"История сохранена: {out_path}")
 else:
-    st.write("Выберите конфиг слева и нажмите «Запустить».")
+    st.write("Выберите уровень и конфиг слева, затем нажмите «Запустить».")

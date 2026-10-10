@@ -35,6 +35,5 @@ ignite:
 
 numerics:
   cfl: 0.4
-  fo: 0.4
   t_end: 0.4
   reaction_iterations: 12
